@@ -274,14 +274,22 @@ const state: { products: Product[]; movements: Movement[]; query: string; online
 };
 
 function filteredProducts(): Product[] {
-  const query = state.query.toLowerCase().trim();
+  const query = normalizeText(state.query);
   if (!query) return state.products;
 
   return state.products.filter(product => {
-    return product.sap.toLowerCase().includes(query)
-      || product.ean.toLowerCase().includes(query)
-      || product.name.toLowerCase().includes(query);
+    return normalizeText(product.sap).includes(query)
+      || normalizeText(product.ean).includes(query)
+      || normalizeText(product.name).includes(query);
   });
+}
+
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
 }
 
 async function refresh(): Promise<void> {

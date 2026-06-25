@@ -25,3 +25,9 @@ Motivo: reduce dependencias, simplifica el arranque y evita gastar tiempo en inf
 Decision: cada avance estable debe quedar en commit.
 
 Motivo: permite volver a estados buenos si una mejora rompe la app.
+
+## 2026-06-25 - Busqueda tolerante a acentos
+
+Decision: normalizar texto al buscar productos.
+
+Motivo: en uso diario es esperable escribir `cafe` y encontrar `Cafe` o `Café`.

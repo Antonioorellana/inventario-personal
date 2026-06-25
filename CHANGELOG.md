@@ -12,3 +12,5 @@
 - Agrega exportacion CSV de productos.
 - Agrega documentacion inicial y criterios de mejora.
 - Publica primera version en Vercel: https://inventario-personal-mu.vercel.app
+- Agrega escaner de codigo de barra con camara y solicitud de 120 fps ideal.
+- Evita registrar service worker en localhost para no servir builds cacheados durante desarrollo.

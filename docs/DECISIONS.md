@@ -31,3 +31,11 @@ Motivo: permite volver a estados buenos si una mejora rompe la app.
 Decision: normalizar texto al buscar productos.
 
 Motivo: en uso diario es esperable escribir `cafe` y encontrar `Cafe` o `Café`.
+
+## 2026-06-25 - Escaner con BarcodeDetector
+
+Decision: usar la API nativa `BarcodeDetector` antes de sumar librerias externas.
+
+Motivo: mantiene la primera version liviana y permite escaneo rapido donde el navegador lo soporta.
+
+Nota: la app solicita 120 fps, pero el frame rate real depende del dispositivo y navegador.

@@ -7,6 +7,7 @@ Primera version basica de una PWA personal para gestionar inventario.
 Tener una app simple, instalable y offline-first para:
 
 - Buscar productos por SAP, EAN o nombre.
+- Escanear códigos de barra con cámara cuando el navegador soporte `BarcodeDetector`.
 - Ver stock actual.
 - Registrar ingresos y egresos.
 - Evitar egresos con stock local insuficiente.
@@ -78,3 +79,17 @@ Uso personal, seguridad minima:
 - No hay login todavia.
 - Validaciones criticas son locales y simples.
 - Cuando exista backend, el stock real debera validarse del lado servidor.
+
+## Escaner de codigo de barra
+
+La app solicita:
+
+- Cámara trasera (`facingMode: environment`).
+- `frameRate` ideal de 120 fps, con mínimo de 30 fps.
+- Formatos comunes: EAN-13, EAN-8, UPC, Code 128, Code 39 e ITF.
+
+Notas:
+
+- 120 fps no se puede garantizar desde una app web; depende de cámara, navegador, sistema operativo y permisos.
+- El escáner usa `BarcodeDetector`, disponible principalmente en navegadores Chromium modernos.
+- En iPhone/Safari puede no estar disponible; en ese caso se mantiene la búsqueda manual por SAP/EAN/nombre.

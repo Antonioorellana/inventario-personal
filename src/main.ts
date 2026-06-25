@@ -1,5 +1,19 @@
 import './styles.css';
 
+type DetectedBarcode = {
+  rawValue: string;
+};
+
+type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => {
+  detect: (source: HTMLVideoElement) => Promise<DetectedBarcode[]>;
+};
+
+declare global {
+  interface Window {
+    BarcodeDetector?: BarcodeDetectorConstructor;
+  }
+}
+
 type Product = {
   id: string;
   sap: string;
@@ -26,9 +40,23 @@ const DB_NAME = 'inventario-personal-db';
 const DB_VERSION = 1;
 const PRODUCTS = 'products';
 const MOVEMENTS = 'movements';
+const BARCODE_FORMATS = [
+  'ean_13',
+  'ean_8',
+  'upc_a',
+  'upc_e',
+  'code_128',
+  'code_39',
+  'itf'
+];
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 let selectedProductId = '';
+let scannerStream: MediaStream | null = null;
+let scannerFrameId = 0;
+let scannerDetector: InstanceType<BarcodeDetectorConstructor> | null = null;
+let scannerFrameCount = 0;
+let scannerStartedAt = 0;
 
 const sampleProducts: Product[] = [
   createProduct('SAP-001', '7800000000012', 'Aceite de oliva 1L', 12, 'unidad'),
@@ -266,6 +294,146 @@ function exportCsv(): void {
   URL.revokeObjectURL(url);
 }
 
+async function startScanner(): Promise<void> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast('Este navegador no permite usar la cámara.', 'error');
+    return;
+  }
+
+  if (!window.BarcodeDetector) {
+    toast('Este navegador no soporta BarcodeDetector. Prueba Chrome/Edge en Android o escritorio.', 'error');
+    return;
+  }
+
+  if (scannerStream) {
+    toast('El escáner ya está activo.', 'success');
+    return;
+  }
+
+  const video = document.querySelector<HTMLVideoElement>('#scanner-video');
+  const status = document.querySelector<HTMLParagraphElement>('#scanner-status');
+  if (!video || !status) return;
+
+  try {
+    scannerDetector = new window.BarcodeDetector({ formats: BARCODE_FORMATS });
+  } catch (error) {
+    console.warn('BarcodeDetector no disponible para los formatos solicitados.', error);
+    toast('Este navegador no soporta escaneo de códigos de barra compatible.', 'error');
+    return;
+  }
+
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        frameRate: { ideal: 120, min: 30 },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
+
+    const [track] = scannerStream.getVideoTracks();
+    await applyHighFrameRate(track);
+
+    video.srcObject = scannerStream;
+    await video.play();
+
+    scannerFrameCount = 0;
+    scannerStartedAt = performance.now();
+    status.textContent = 'Escaneando... apunta al código de barra.';
+    updateScannerControls(true);
+    scannerFrameId = requestAnimationFrame(scanFrame);
+  } catch (error) {
+    console.error(error);
+    stopScanner();
+    toast('No se pudo iniciar la cámara. Revisa permisos del navegador.', 'error');
+  }
+}
+
+async function applyHighFrameRate(track: MediaStreamTrack): Promise<void> {
+  const capabilities = track.getCapabilities?.();
+  const maxFrameRate = capabilities?.frameRate?.max;
+  const targetFrameRate = Math.min(120, maxFrameRate || 120);
+
+  try {
+    await track.applyConstraints({
+      advanced: [{ frameRate: targetFrameRate }]
+    });
+  } catch (error) {
+    console.info('No se pudo aplicar 120 fps; se usará el máximo disponible.', error);
+  }
+}
+
+async function scanFrame(): Promise<void> {
+  const video = document.querySelector<HTMLVideoElement>('#scanner-video');
+  const status = document.querySelector<HTMLParagraphElement>('#scanner-status');
+  if (!video || !status || !scannerDetector || !scannerStream) return;
+
+  scannerFrameCount += 1;
+  const elapsedSeconds = (performance.now() - scannerStartedAt) / 1000;
+  if (elapsedSeconds > 0.5) {
+    const fps = Math.round(scannerFrameCount / elapsedSeconds);
+    status.textContent = `Escaneando a ~${fps} fps. Objetivo solicitado: 120 fps.`;
+  }
+
+  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    try {
+      const codes = await scannerDetector.detect(video);
+      const code = codes[0]?.rawValue?.trim();
+      if (code) {
+        await handleScannedCode(code);
+        return;
+      }
+    } catch (error) {
+      console.warn('Error detectando código.', error);
+    }
+  }
+
+  scannerFrameId = requestAnimationFrame(scanFrame);
+}
+
+async function handleScannedCode(code: string): Promise<void> {
+  stopScanner();
+  const product = state.products.find(item => item.ean === code || item.sap === code);
+
+  if (product) {
+    selectedProductId = product.id;
+    state.query = code;
+    await refresh();
+    toast(`Código detectado: ${code}. Producto seleccionado.`, 'success');
+    return;
+  }
+
+  state.query = code;
+  await refresh();
+  toast(`Código detectado: ${code}. No está en el catálogo.`, 'error');
+}
+
+function stopScanner(): void {
+  if (scannerFrameId) {
+    cancelAnimationFrame(scannerFrameId);
+    scannerFrameId = 0;
+  }
+
+  scannerStream?.getTracks().forEach(track => track.stop());
+  scannerStream = null;
+  scannerDetector = null;
+
+  const video = document.querySelector<HTMLVideoElement>('#scanner-video');
+  const status = document.querySelector<HTMLParagraphElement>('#scanner-status');
+  if (video) video.srcObject = null;
+  if (status) status.textContent = 'Cámara detenida.';
+  updateScannerControls(false);
+}
+
+function updateScannerControls(active: boolean): void {
+  const startButton = document.querySelector<HTMLButtonElement>('#start-scanner');
+  const stopButton = document.querySelector<HTMLButtonElement>('#stop-scanner');
+  if (startButton) startButton.disabled = active;
+  if (stopButton) stopButton.disabled = !active;
+}
+
 const state: { products: Product[]; movements: Movement[]; query: string; online: boolean } = {
   products: [],
   movements: [],
@@ -372,6 +540,32 @@ function render(): void {
           </div>
         </section>
 
+        <section class="panel scanner-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Escaner</p>
+              <h2>Código de barra</h2>
+            </div>
+            <span class="fps-badge">120 fps ideal</span>
+          </div>
+
+          <div class="scanner-frame">
+            <video id="scanner-video" muted playsinline></video>
+            <div class="scanner-overlay">
+              <div class="scanner-target"></div>
+            </div>
+          </div>
+
+          <p id="scanner-status" class="scanner-status">
+            Listo. La app solicitará cámara trasera y 120 fps si el dispositivo lo permite.
+          </p>
+
+          <div class="scanner-actions">
+            <button id="start-scanner" class="primary compact">Iniciar escáner</button>
+            <button id="stop-scanner" class="secondary compact" disabled>Detener</button>
+          </div>
+        </section>
+
         <section class="panel movement-panel">
           <div class="panel-heading">
             <div>
@@ -451,6 +645,8 @@ function bindEvents(): void {
   document.querySelector<HTMLButtonElement>('#movement-button')?.addEventListener('click', registerMovement);
   document.querySelector<HTMLButtonElement>('#sync-button')?.addEventListener('click', syncNow);
   document.querySelector<HTMLButtonElement>('#export-button')?.addEventListener('click', exportCsv);
+  document.querySelector<HTMLButtonElement>('#start-scanner')?.addEventListener('click', startScanner);
+  document.querySelector<HTMLButtonElement>('#stop-scanner')?.addEventListener('click', stopScanner);
   document.querySelector<HTMLInputElement>('#csv-input')?.addEventListener('change', event => {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (file) importCsv(file);
@@ -477,12 +673,16 @@ window.addEventListener('offline', () => {
   render();
 });
 
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && !isLocalDevHost()) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(error => {
       console.warn('No se pudo registrar el service worker.', error);
     });
   });
+}
+
+function isLocalDevHost(): boolean {
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 }
 
 await openDb();

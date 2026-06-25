@@ -1,0 +1,17 @@
+{
+  "name": "Inventario Personal",
+  "short_name": "Inventario",
+  "description": "PWA personal para control simple de inventario offline.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7efe7",
+  "theme_color": "#b86143",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -39,3 +39,9 @@ Decision: usar la API nativa `BarcodeDetector` antes de sumar librerias externas
 Motivo: mantiene la primera version liviana y permite escaneo rapido donde el navegador lo soporta.
 
 Nota: la app solicita 120 fps, pero el frame rate real depende del dispositivo y navegador.
+
+## 2026-06-25 - UI basada en concepto Inventario Pro
+
+Decision: adoptar el layout del concepto con sidebar, topbar, KPIs, tabla central y panel derecho.
+
+Motivo: mejora la claridad operativa y deja una base visual mas cercana a una herramienta de inventario real.

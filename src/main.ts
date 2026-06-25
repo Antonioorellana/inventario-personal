@@ -480,148 +480,237 @@ function toast(message: string, type: 'success' | 'error'): void {
   }, 3200);
 }
 
+function productStatus(product: Product): { label: string; className: string } {
+  if (product.stock <= 0) return { label: 'Agotado', className: 'danger' };
+  if (product.stock <= 6) return { label: 'Bajo stock', className: 'warning' };
+  return { label: 'OK', className: 'ok' };
+}
+
+function soonDate(index: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + 30 + index * 9);
+  return date.toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
+
+function productCategory(product: Product): string {
+  const name = normalizeText(product.name);
+  if (name.includes('aceite')) return 'Aceites';
+  if (name.includes('arroz') || name.includes('cafe')) return 'Abarrotes';
+  if (name.includes('detergente')) return 'Limpieza';
+  return 'General';
+}
+
 function render(): void {
   const pending = state.movements.filter(item => item.status === 'pending').length;
   const totalStock = state.products.reduce((sum, product) => sum + product.stock, 0);
+  const lowStock = state.products.filter(product => product.stock > 0 && product.stock <= 6).length;
+  const outOfStock = state.products.filter(product => product.stock <= 0).length;
   const selected = state.products.find(product => product.id === selectedProductId);
   const products = filteredProducts();
 
   document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="app-shell">
-      <header class="topbar">
-        <div>
-          <strong>Inventario Personal</strong>
-          <span>Primera version offline</span>
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">◆</span>
+          <strong>Inventario <em>Pro</em></strong>
         </div>
-        <div class="status-row">
-          <span class="status ${state.online ? 'online' : 'offline'}">${state.online ? 'Online' : 'Offline'}</span>
-          <button id="sync-button" class="secondary">Sincronizar ahora (${pending})</button>
-        </div>
-      </header>
-
-      <main class="layout">
-        <section class="hero">
+        <nav class="nav-list" aria-label="Navegacion principal">
+          <a class="active" href="#panel">▦ Panel</a>
+          <a href="#inventario">▧ Inventario</a>
+          <a href="#scanner">▥ Escanear</a>
+          <a href="#historial">↺ Historial</a>
+          <a href="#proveedores">♙ Proveedores</a>
+        </nav>
+        <div class="sidebar-spacer"></div>
+        <div class="sidebar-user">
+          <span>AD</span>
           <div>
-            <p class="eyebrow">Control simple</p>
-            <h1>Stock personal sin complicarse.</h1>
-            <p>Busca por SAP, EAN o nombre; registra ingresos y egresos; importa y exporta CSV.</p>
+            <strong>Admin</strong>
+            <small>uso personal</small>
           </div>
-          <div class="metric-card">
-            <span>Stock total</span>
-            <strong>${totalStock.toLocaleString('es-CL')}</strong>
-            <small>${state.products.length} productos</small>
-          </div>
-        </section>
-
-        <section class="panel products-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Catalogo</p>
-              <h2>Productos</h2>
-            </div>
-            <label class="import-button">
-              Importar CSV
-              <input id="csv-input" type="file" accept=".csv,text/csv" hidden>
-            </label>
-          </div>
-
-          <input id="search" class="search" placeholder="Buscar SAP, EAN o nombre..." value="${escapeHtml(state.query)}">
-
-          <div class="product-list">
-            ${products.map(product => `
-              <button class="product-row ${product.id === selectedProductId ? 'selected' : ''}" data-product-id="${product.id}">
-                <span>
-                  <strong>${escapeHtml(product.name)}</strong>
-                  <small>${escapeHtml(product.sap)} · ${escapeHtml(product.ean || 'sin EAN')}</small>
-                </span>
-                <em>${product.stock.toLocaleString('es-CL')} ${escapeHtml(product.unit)}</em>
-              </button>
-            `).join('') || '<p class="empty">No hay productos para esta busqueda.</p>'}
-          </div>
-        </section>
-
-        <section class="panel scanner-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Escaner</p>
-              <h2>Código de barra</h2>
-            </div>
-            <span class="fps-badge">120 fps ideal</span>
-          </div>
-
-          <div class="scanner-frame">
+        </div>
+        <section class="quick-scanner" id="scanner">
+          <header>
+            <strong>Escáner rápido</strong>
+            <span>⋮</span>
+          </header>
+          <div class="scanner-frame compact-frame">
             <video id="scanner-video" muted playsinline></video>
             <div class="scanner-overlay">
               <div class="scanner-target"></div>
             </div>
           </div>
-
-          <p id="scanner-status" class="scanner-status">
-            Listo. La app solicitará cámara trasera y 120 fps si el dispositivo lo permite.
-          </p>
-
+          <p id="scanner-status" class="scanner-status">Listo para escanear</p>
           <div class="scanner-actions">
-            <button id="start-scanner" class="primary compact">Iniciar escáner</button>
+            <button id="start-scanner" class="primary compact">Escanear</button>
             <button id="stop-scanner" class="secondary compact" disabled>Detener</button>
           </div>
         </section>
+        <small class="version">v0.2.0</small>
+      </aside>
 
-        <section class="panel movement-panel">
-          <div class="panel-heading">
+      <div class="workspace">
+        <header class="topbar">
+          <button class="icon-button" aria-label="Menu">☰</button>
+          <label class="global-search">
+            <span>⌕</span>
+            <input id="search" placeholder="Buscar productos, SKU, EAN o lotes..." value="${escapeHtml(state.query)}">
+          </label>
+          <div class="status-row">
+            <span class="cloud">☁</span>
+            <span class="status ${state.online ? 'online' : 'offline'}">${state.online ? 'Sincronizado' : 'Offline'}</span>
+            <button id="sync-button" class="secondary">Sincronizar (${pending})</button>
+          </div>
+        </header>
+
+        <main class="dashboard" id="panel">
+          <div class="page-title">
             <div>
-              <p class="eyebrow">Movimiento</p>
-              <h2>${selected ? escapeHtml(selected.name) : 'Selecciona producto'}</h2>
+              <h1>Panel</h1>
+              <p>Resumen operativo de inventario</p>
             </div>
-            <button id="export-button" class="secondary">Exportar CSV</button>
-          </div>
-
-          <div class="stock-card">
-            <span>Stock actual</span>
-            <strong>${selected ? selected.stock.toLocaleString('es-CL') : '0'} ${selected ? escapeHtml(selected.unit) : ''}</strong>
-          </div>
-
-          <div class="movement-type">
-            <label><input type="radio" name="movement-type" value="in" checked> Ingreso</label>
-            <label><input type="radio" name="movement-type" value="out"> Egreso</label>
-          </div>
-
-          <label class="field">
-            Cantidad
-            <input id="movement-quantity" type="number" min="0" step="0.01" placeholder="0">
-          </label>
-
-          <label class="field">
-            Motivo
-            <input id="movement-reason" placeholder="Compra, consumo, ajuste...">
-          </label>
-
-          <button id="movement-button" class="primary">Registrar movimiento</button>
-        </section>
-
-        <section class="panel history-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Registro</p>
-              <h2>Ultimos movimientos</h2>
+            <div class="toolbar-actions">
+              <button class="secondary">Hoy ▾</button>
+              <button class="secondary">Filtros</button>
             </div>
           </div>
 
-          <div class="movement-list">
-            ${state.movements.slice(0, 10).map(movement => `
-              <article class="movement-row">
-                <span>
-                  <strong>${escapeHtml(movement.productName)}</strong>
-                  <small>${new Date(movement.createdAt).toLocaleString('es-CL')} · ${escapeHtml(movement.reason)}</small>
-                </span>
-                <em class="${movement.type === 'out' ? 'danger' : 'success'}">
-                  ${movement.type === 'out' ? '-' : '+'}${movement.quantity.toLocaleString('es-CL')}
-                  <small>${movement.status}</small>
-                </em>
-              </article>
-            `).join('') || '<p class="empty">Aun no hay movimientos.</p>'}
-          </div>
-        </section>
-      </main>
+          <section class="metric-grid">
+            <article class="metric-card green">
+              <span class="metric-icon">▣</span>
+              <div>
+                <small>Stock total</small>
+                <strong>${totalStock.toLocaleString('es-CL')}</strong>
+                <p>unidades</p>
+              </div>
+            </article>
+            <article class="metric-card amber">
+              <span class="metric-icon">△</span>
+              <div>
+                <small>Bajo stock</small>
+                <strong>${lowStock}</strong>
+                <p>SKUs</p>
+              </div>
+            </article>
+            <article class="metric-card red">
+              <span class="metric-icon">□</span>
+              <div>
+                <small>Agotados</small>
+                <strong>${outOfStock}</strong>
+                <p>SKUs</p>
+              </div>
+            </article>
+            <article class="metric-card blue">
+              <span class="metric-icon">↻</span>
+              <div>
+                <small>Sincronización</small>
+                <strong>${pending === 0 ? '100%' : `${pending}`}</strong>
+                <p>${pending === 0 ? 'Sincronizado' : 'pendientes'}</p>
+              </div>
+            </article>
+          </section>
+
+          <section class="main-grid">
+            <section class="inventory-card" id="inventario">
+              <div class="card-title">
+                <div>
+                  <h2>Inventario</h2>
+                  <span>${products.length} SKUs</span>
+                </div>
+                <div class="card-actions">
+                  <button id="export-button" class="secondary">Exportar</button>
+                  <label class="primary import-button">
+                    Importar
+                    <input id="csv-input" type="file" accept=".csv,text/csv" hidden>
+                  </label>
+                </div>
+              </div>
+
+              <div class="inventory-table">
+                <div class="table-row table-head">
+                  <span>SKU / EAN</span>
+                  <span>Producto</span>
+                  <span>Categoría</span>
+                  <span>Stock</span>
+                  <span>Lote</span>
+                  <span>Vencimiento</span>
+                  <span>Estado</span>
+                  <span></span>
+                </div>
+                ${products.map((product, index) => {
+                  const status = productStatus(product);
+                  return `
+                    <button class="table-row product-row ${product.id === selectedProductId ? 'selected' : ''}" data-product-id="${product.id}">
+                      <span><strong>${escapeHtml(product.ean || product.sap)}</strong><small>${escapeHtml(product.sap)}</small></span>
+                      <span class="product-cell"><i>${product.name.slice(0, 1).toUpperCase()}</i><span><strong>${escapeHtml(product.name)}</strong><small>Unidad: ${escapeHtml(product.unit)}</small></span></span>
+                      <span>${productCategory(product)}</span>
+                      <span class="${status.className === 'ok' ? 'success' : status.className === 'danger' ? 'danger' : 'warn'}">${product.stock.toLocaleString('es-CL')}</span>
+                      <span>L${String(index + 1).padStart(4, '0')}</span>
+                      <span>${soonDate(index)}</span>
+                      <span><mark class="status-pill ${status.className}">${status.label}</mark></span>
+                      <span>⋮</span>
+                    </button>
+                  `;
+                }).join('') || '<p class="empty">No hay productos para esta busqueda.</p>'}
+              </div>
+            </section>
+
+            <aside class="right-panel">
+              <section class="side-card">
+                <div class="card-title compact-title">
+                  <h2>Cola de escaneos</h2>
+                  <span>${pending}</span>
+                </div>
+                <div class="scan-list" id="historial">
+                  ${state.movements.slice(0, 6).map(movement => `
+                    <article>
+                      <span class="scan-icon">▦</span>
+                      <div>
+                        <strong>${escapeHtml(movement.productName)}</strong>
+                        <small>${new Date(movement.createdAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</small>
+                      </div>
+                      <em class="${movement.type === 'out' ? 'danger' : 'success'}">${movement.type === 'out' ? '-' : '+'}${movement.quantity}</em>
+                    </article>
+                  `).join('') || '<p class="empty">Sin movimientos registrados.</p>'}
+                </div>
+              </section>
+
+              <section class="side-card movement-panel">
+                <div class="card-title compact-title">
+                  <h2>Agregar producto rápido</h2>
+                </div>
+                <label class="field">
+                  SKU / EAN
+                  <input value="${selected ? escapeHtml(selected.ean || selected.sap) : ''}" readonly placeholder="Escanear o ingresar código">
+                </label>
+                <label class="field">
+                  Producto
+                  <input value="${selected ? escapeHtml(selected.name) : ''}" readonly placeholder="Buscar producto...">
+                </label>
+                <div class="movement-type">
+                  <label><input type="radio" name="movement-type" value="in" checked> Ingreso</label>
+                  <label><input type="radio" name="movement-type" value="out"> Egreso</label>
+                </div>
+                <label class="field">
+                  Cantidad
+                  <input id="movement-quantity" type="number" min="0" step="0.01" placeholder="0">
+                </label>
+                <label class="field">
+                  Motivo
+                  <input id="movement-reason" placeholder="Compra, consumo, ajuste...">
+                </label>
+                <button id="movement-button" class="primary">Agregar al inventario</button>
+              </section>
+            </aside>
+          </section>
+        </main>
+        <footer class="bottom-status">Almacén: <strong>Almacén Central</strong></footer>
+      </div>
       <div id="toast" class="toast"></div>
     </div>
   `;

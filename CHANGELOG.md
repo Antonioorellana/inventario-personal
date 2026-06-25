@@ -11,3 +11,4 @@
 - Agrega importacion CSV.
 - Agrega exportacion CSV de productos.
 - Agrega documentacion inicial y criterios de mejora.
+- Publica primera version en Vercel: https://inventario-personal-mu.vercel.app

@@ -19,6 +19,16 @@ Tener una app simple, instalable y offline-first para:
 
 Esta version no usa backend. La prioridad es una base funcional y facil de mejorar.
 
+## Deploy
+
+Produccion en Vercel:
+
+https://inventario-personal-mu.vercel.app
+
+Proyecto conectado a GitHub:
+
+https://github.com/Antonioorellana/inventario-personal
+
 Datos locales:
 
 - `products`: catalogo y stock local.
